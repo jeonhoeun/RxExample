@@ -1,41 +1,42 @@
 package com.rxexample.rxsubjectdemo;
 
-import androidx.appcompat.app.AppCompatActivity;
-
 import android.os.Bundle;
 import android.util.Log;
+
+import androidx.appcompat.app.AppCompatActivity;
 
 import io.reactivex.Observable;
 import io.reactivex.Observer;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.Disposable;
-import io.reactivex.functions.Consumer;
 import io.reactivex.schedulers.Schedulers;
 import io.reactivex.subjects.AsyncSubject;
+import io.reactivex.subjects.BehaviorSubject;
 
-public class _01_AsyncSubjectActivity extends AppCompatActivity {
+public class _03_BehaviorSubject1Activity extends AppCompatActivity {
     private String tag="RXTEST";
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Log.i(tag,this.getClass().getSimpleName()+" start");
         setContentView(R.layout.activity_main);
-        asyncSubjectDemo1();
+        behaviorSubjectDemo1();
     }
 
     /*
-        AsyncSubject는 onComplete기준으로 마지막 onNext에 들어온값만 emit한다. 아래 예제에서는 JSON만 emit한다.
+        BehaviorSubject는 subscribe시점에서 바로전에꺼와 이후 받는것들만 이벤트를 발생한다.
      */
+    void behaviorSubjectDemo1(){
+        Observable<String> observable = Observable.just("JAVA","KOTLIN","XML","JSON")
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread());
 
-    void asyncSubjectDemo1(){
-        Observable<String> observable = Observable.just("JAVA","KOTLIN","XML","JSON");
-        observable.subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread());
+        BehaviorSubject<String> behaviorSubject = BehaviorSubject.create();
+        observable.subscribe(behaviorSubject);
 
-        AsyncSubject<String> asyncSubject = AsyncSubject.create();
-        observable.subscribe(asyncSubject);
-
-        asyncSubject.subscribe(getFirstObserver());
-        asyncSubject.subscribe(getSecondObserver());
-        asyncSubject.subscribe(getThirdObserver());
+        behaviorSubject.subscribe(getFirstObserver());
+        behaviorSubject.subscribe(getSecondObserver());
+        behaviorSubject.subscribe(getThirdObserver());
     }
 
     private Observer<String> getFirstObserver(){
