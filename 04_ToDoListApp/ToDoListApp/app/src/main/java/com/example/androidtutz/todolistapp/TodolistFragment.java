@@ -13,6 +13,8 @@ import android.support.v7.widget.DefaultItemAnimator;
 import android.support.v7.widget.DividerItemDecoration;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -24,9 +26,20 @@ import com.example.androidtutz.todolistapp.adapter.ToDoListAdapter;
 import com.example.androidtutz.todolistapp.adapter.RecyclerTouchListener;
 import com.example.androidtutz.todolistapp.data.ToDoListItem;
 import com.example.androidtutz.todolistapp.data.ToDoDataManager;
+import com.jakewharton.rxbinding3.widget.RxTextView;
+import com.jakewharton.rxbinding3.widget.TextViewTextChangeEvent;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import io.reactivex.Observable;
+import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.disposables.CompositeDisposable;
+import io.reactivex.functions.Function;
+import io.reactivex.functions.Predicate;
+import io.reactivex.observers.DisposableObserver;
+import io.reactivex.schedulers.Schedulers;
 
 import static android.content.Context.MODE_PRIVATE;
 
@@ -63,6 +76,7 @@ public class TodolistFragment extends Fragment {
     private View view;
     private TextView searchEditText;
 
+    private CompositeDisposable compositeDisposable = new CompositeDisposable();
 
 
     public TodolistFragment() {
@@ -155,7 +169,59 @@ public class TodolistFragment extends Fragment {
         setRecyclerView();
         loadData();
 
+        searchEditText = view.findViewById(R.id.todo_search);
 
+//      아래와 같은 방식은 사용자가 Movie를 친다면 M Mo MOv Movi Movie 를 칠때마다 9번의 search process가 필요한 drawbacks가 있다.
+//      아이템이 천여개라면 메모리 이슈도 발생하며 데이터가 remote API로부터 받는방식이라면 앱에 freeze도 발생한다.
+//        searchEditText.addTextChangedListener(new TextWatcher() {
+//            @Override
+//            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+//
+//            }
+//
+//            @Override
+//            public void onTextChanged(CharSequence s, int start, int before, int count) {
+//                goalAdapter.getFilter().filter(s);
+//
+//            }
+//
+//            @Override
+//            public void afterTextChanged(Editable s) {
+//
+//            }
+//        });
+
+/*        대신에 아래와가이 RxBinding을 이용한다.
+        주요 내용으로는
+        1. skipInitialValue : 초기값에대한 이벤트는 ignore
+        2. debounce ( 제한시간동안 방출 안하다가 그시간안에 맨 마지막 이벤트만 방출 주로 UI이벤트에서 활용 )
+        3. distinctUntilChanged ( 변화가 있을때만 방출한다. distinct와는 다르게 중복도 방출된다.)
+*/
+
+compositeDisposable.add(
+        RxTextView.textChangeEvents(searchEditText)
+                .skipInitialValue()
+                .debounce(300,TimeUnit.MILLISECONDS)
+                .distinctUntilChanged()
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribeWith(new DisposableObserver<TextViewTextChangeEvent>() {
+                    @Override
+                    public void onNext(TextViewTextChangeEvent textViewTextChangeEvent) {
+                        goalAdapter.getFilter().filter(textViewTextChangeEvent.getText());
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+
+                    }
+
+                    @Override
+                    public void onComplete() {
+
+                    }
+                })
+);
 
 
 
@@ -229,12 +295,51 @@ public class TodolistFragment extends Fragment {
 
     private void loadData() {
 
+        Observable<ToDoListItem> observable = Observable.fromArray(toDoDataManager.getAllToDoListItem_list().toArray(new ToDoListItem[0]));
+        compositeDisposable.add(
+                observable.subscribeOn(Schedulers.io())
+                        .filter(new Predicate<ToDoListItem>() {
+                            @Override
+                            public boolean test(ToDoListItem toDoListItem) throws Exception {
+                                return toDoListItem.getToDoListItemStatus().equals(taskStatus);
+                            }
+                        })
+                        .map(new Function<ToDoListItem, ToDoListItem>() {
 
+                            @Override
+                            public ToDoListItem apply(ToDoListItem toDoListItem) throws Exception {
+                                toDoListItem.setToDoListItemDescription(dateFront+ " "+toDoListItem.getToDoListItemPlanedAchievDate());
+                                return toDoListItem;
+                            }
+                        })
+                        .observeOn(AndroidSchedulers.mainThread()).subscribeWith(new DisposableObserver<ToDoListItem>() {
+                    @Override
+                    public void onNext(ToDoListItem toDoListItem) {
+                        goalsList.add(toDoListItem);
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        goalAdapter.notifyDataSetChanged();
+                    }
+                })
+
+        );
 
 
 
     }
 
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        compositeDisposable.clear();
+    }
 
     public void markAsAchieved(int position) {
 
